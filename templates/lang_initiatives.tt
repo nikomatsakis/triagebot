@@ -1,0 +1,10 @@
+{% import "_initiatives.tt" as initiatives %}
+---
+title: Lang Team Initiatives Report {{CURRENT_DATE}}
+---
+
+# Lang Team Initiatives Report
+
+This report shows the current status of ongoing initiatives from the lang team project board.
+
+{{ initiatives::render(initiatives=initiatives) }}

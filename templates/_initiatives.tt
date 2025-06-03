@@ -1,0 +1,29 @@
+{% import "_issues.tt" as issues %}
+
+{% macro render(initiatives) %}
+## Lang Team Initiatives
+
+{# Check if initiatives exists, since we might skip some queries if they fail #}
+{% if initiatives is undefined %}
+- Initiatives data not available.
+{% elif initiatives | length == 0 %}
+- No initiatives found.
+{% else %}
+{# Define the order of status sections #}
+{% set status_order = ["Project goal", "Exploration", "Accepted RFC", "Preview"] %}
+
+{# Loop through each status and display initiatives with that status #}
+{% for status in status_order %}
+    {# Get all initiatives for this status #}
+    {% set status_initiatives = initiatives | filter(attribute="initiative_status", value=status) %}
+    
+    {% if status_initiatives | length > 0 %}
+### {{ status }}
+
+        {% for initiative in status_initiatives %}
+- "{{initiative.title}}" [{{initiative.repo_name}}#{{initiative.number}}]({{initiative.html_url}}) (Champion: {% if initiative.initiative_champion %}{{initiative.initiative_champion}}{% else %}unassigned{% endif %})
+        {% endfor %}
+    {% endif %}
+{% endfor %}
+{% endif %}
+{% endmacro %}
