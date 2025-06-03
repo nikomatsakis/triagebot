@@ -2220,6 +2220,8 @@ impl<'q> IssuesQuery for Query<'q> {
                 updated_at_hts: crate::actions::to_human(issue.updated_at),
                 fcp_details,
                 mcp_details,
+                initiative_status: None,
+                initiative_champion: None,
             });
         }
 
@@ -3035,6 +3037,8 @@ impl IssuesQuery for LeastRecentlyReviewedPullRequests {
                         updated_at_hts,
                         fcp_details: None,
                         mcp_details: None,
+                        initiative_status: None,
+                        initiative_champion: None,
                     }
                 },
             )
@@ -3046,14 +3050,14 @@ impl IssuesQuery for LeastRecentlyReviewedPullRequests {
 
 async fn project_items_by_status(
     client: &GithubClient,
+    project_number: i32,
     status_filter: impl Fn(Option<&str>) -> bool,
 ) -> anyhow::Result<Vec<github_graphql::project_items::ProjectV2Item>> {
     use cynic::QueryBuilder;
     use github_graphql::project_items;
 
-    const DESIGN_MEETING_PROJECT: i32 = 31;
     let mut args = project_items::Arguments {
-        project_number: DESIGN_MEETING_PROJECT,
+        project_number,
         after: None,
     };
 
@@ -3127,9 +3131,12 @@ impl IssuesQuery for DesignMeetings {
     ) -> anyhow::Result<Vec<crate::actions::IssueDecorator>> {
         use github_graphql::project_items::ProjectV2ItemContent;
 
-        let items =
-            project_items_by_status(client, |status| status == self.with_status.query_str())
-                .await?;
+        // For design meetings, we use project board #31
+        let items = project_items_by_status(
+            client, 
+            31, // Design meeting project board
+            |status| status == self.with_status.query_str()
+        ).await?;
         Ok(items
             .into_iter()
             .flat_map(|item| match item.content {
@@ -3144,6 +3151,8 @@ impl IssuesQuery for DesignMeetings {
                     repo_name: String::new(),
                     labels: String::new(),
                     updated_at_hts: String::new(),
+                    initiative_status: None,
+                    initiative_champion: None,
                 }),
                 _ => None,
             })
@@ -3193,6 +3202,109 @@ impl Submodule {
                 anyhow::anyhow!("expected .git suffix, got {}", self.submodule_git_url)
             })?;
         client.repository(fullname).await
+    }
+}
+
+/// Parse a GitHub URL into owner and repository components
+/// 
+/// # Arguments
+/// 
+/// * `url` - A GitHub URL like "https://github.com/owner/repo/issues/123"
+/// 
+/// # Returns
+/// 
+/// * `Some((owner, repo))` if parsing succeeds
+/// * `None` if the URL doesn't match the expected format
+fn parse_github_url(url: &str) -> Option<(String, String)> {
+    let parts: Vec<&str> = url.split('/').collect();
+    if parts.len() >= 5 && parts[2] == "github.com" {
+        Some((parts[3].to_string(), parts[4].to_string()))
+    } else {
+        None
+    }
+}
+
+/// Convert a GitHub HTML URL to a GitHub API URL
+fn github_url_to_api_url(url: &str) -> Option<String> {
+    // Example: https://github.com/rust-lang/rust/issues/123 -> https://api.github.com/repos/rust-lang/rust/issues/123
+    if let Some((owner, repo)) = parse_github_url(url) {
+        let parts: Vec<&str> = url.split('/').collect();
+        if parts.len() >= 7 && (parts[5] == "issues" || parts[5] == "pull") {
+            let issue_num = parts[6];
+            return Some(format!("https://api.github.com/repos/{}/{}/issues/{}", owner, repo, issue_num));
+        }
+    }
+    None
+}
+
+/// Query implementation for Lang Team initiatives from a GitHub project board
+pub struct ProjectBoardInitiatives {
+    /// The GitHub project board number to query
+    pub project_number: i32,
+}
+
+impl ProjectBoardInitiatives {
+    /// Helper function to check if a status is one of the relevant statuses for initiatives
+    fn is_relevant_status(status: Option<&str>) -> bool {
+        matches!(status, Some("Project goal") | Some("Exploration") | 
+                        Some("Accepted RFC") | Some("Preview"))
+    }
+}
+
+#[async_trait]
+impl IssuesQuery for ProjectBoardInitiatives {
+    async fn query<'a>(
+        &'a self,
+        _repo: &'a Repository,
+        _include_fcp_details: bool,
+        _include_mcp_details: bool,
+        client: &'a GithubClient,
+    ) -> anyhow::Result<Vec<crate::actions::IssueDecorator>> {
+        use anyhow::Context;
+        use github_graphql::project_items::ProjectV2ItemContent;
+
+        // Get project board items with status filter
+        let items = project_items_by_status(client, self.project_number, Self::is_relevant_status).await?;
+
+        let mut decorators = Vec::new();
+        
+        for item in items {
+            if let Some(ProjectV2ItemContent::Issue(ref issue)) = item.content {
+                // Status and champion from project board
+                let status = item.status().unwrap_or("Unknown").to_string();
+                let champion = item.champion().unwrap_or("").to_string();
+                
+                // Convert GitHub HTML URL to API URL
+                let api_url = github_url_to_api_url(&issue.url.0)
+                    .with_context(|| format!("Failed to convert URL to API URL: {}", issue.url.0))?;
+                
+                // Fetch detailed issue directly
+                let detailed_issue: Issue = client.json(client.get(&api_url)).await
+                    .with_context(|| format!("Failed to fetch issue details from {}", api_url))?;
+                
+                // Extract repo name for display
+                let repo_name = parse_github_url(&issue.url.0)
+                    .map(|(_, repo)| repo)
+                    .with_context(|| format!("Failed to parse repository name from URL: {}", issue.url.0))?;
+                
+                decorators.push(crate::actions::IssueDecorator {
+                    number: detailed_issue.number,
+                    title: detailed_issue.title.clone(),
+                    html_url: detailed_issue.html_url.clone(),
+                    repo_name,
+                    labels: detailed_issue.labels.iter().map(|l| l.name.as_str()).collect::<Vec<_>>().join(", "),
+                    author: detailed_issue.user.login.clone(),
+                    assignees: detailed_issue.assignees.iter().map(|u| u.login.as_str()).collect::<Vec<_>>().join(", "),
+                    updated_at_hts: crate::actions::to_human(detailed_issue.updated_at),
+                    fcp_details: None,
+                    mcp_details: None,
+                    initiative_status: Some(status),
+                    initiative_champion: Some(champion),
+                });
+            }
+        }
+        
+        Ok(decorators)
     }
 }
 

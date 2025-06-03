@@ -50,6 +50,18 @@ pub struct IssueDecorator {
 
     pub fcp_details: Option<FCPDetails>,
     pub mcp_details: Option<MCPDetails>,
+    
+    /// Status of a lang team initiative from the project board.
+    /// 
+    /// This field is only populated by the [`crate::github::ProjectBoardInitiatives`] query
+    /// and represents the "Status" field value from the project board.
+    pub initiative_status: Option<String>,
+    
+    /// Champion assigned to a lang team initiative.
+    /// 
+    /// This field is only populated by the [`crate::github::ProjectBoardInitiatives`] query
+    /// and represents the "Champion" field value from the project board.
+    pub initiative_champion: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
