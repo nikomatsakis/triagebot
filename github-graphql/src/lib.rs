@@ -316,9 +316,15 @@ pub mod project_items {
         #[cynic(rename = "fieldValueByName")]
         #[arguments(name = "Status")]
         pub status: Option<ProjectV2ItemFieldValue>,
+        
         #[cynic(rename = "fieldValueByName")]
         #[arguments(name = "Date")]
         pub date: Option<ProjectV2ItemFieldValue>,
+        
+        // Add Champion field
+        #[cynic(rename = "fieldValueByName")]
+        #[arguments(name = "Champion")]
+        pub champion: Option<ProjectV2ItemFieldValue>,
     }
 
     impl ProjectV2Item {
@@ -335,6 +341,14 @@ pub mod project_items {
             };
             date.as_date()
         }
+        
+        // Add helper method for champion
+        pub fn champion(&self) -> Option<&str> {
+            let Some(ref champion) = self.champion else {
+                return None;
+            };
+            champion.as_str()
+        }
     }
 
     #[derive(cynic::InlineFragments, Debug)]
@@ -349,6 +363,7 @@ pub mod project_items {
     pub enum ProjectV2ItemFieldValue {
         ProjectV2ItemFieldSingleSelectValue(ProjectV2ItemFieldSingleSelectValue),
         ProjectV2ItemFieldDateValue(ProjectV2ItemFieldDateValue),
+        ProjectV2ItemFieldTextValue(ProjectV2ItemFieldTextValue),
 
         #[cynic(fallback)]
         Other,
@@ -358,6 +373,7 @@ pub mod project_items {
         pub fn as_str(&self) -> Option<&str> {
             Some(match self {
                 Self::ProjectV2ItemFieldSingleSelectValue(val) => val.name.as_deref()?,
+                Self::ProjectV2ItemFieldTextValue(val) => val.text.as_deref()?,
                 _ => return None,
             })
         }
@@ -385,5 +401,11 @@ pub mod project_items {
     #[derive(cynic::QueryFragment, Debug)]
     pub struct ProjectV2ItemFieldDateValue {
         pub date: Option<Date>,
+    }
+    
+    // Add the missing TextValue type
+    #[derive(cynic::QueryFragment, Debug)]
+    pub struct ProjectV2ItemFieldTextValue {
+        pub text: Option<String>,
     }
 }
