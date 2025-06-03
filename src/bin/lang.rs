@@ -18,11 +18,16 @@ async fn main() -> anyhow::Result<()> {
                 print!("{}", agenda.call().await?);
                 return Ok(());
             }
+            "initiatives" => {
+                let initiatives = agenda::lang_initiatives();
+                print!("{}", initiatives.call().await?);
+                return Ok(());
+            }
             _ => {}
         }
     }
 
-    eprintln!("Usage: lang (agenda|planning)");
+    eprintln!("Usage: lang (agenda|planning|initiatives)");
 
     Ok(())
 }

@@ -714,6 +714,27 @@ pub fn compiler_backlog_bonanza<'a>() -> Box<dyn Action> {
     })
 }
 
+/// Generate a report of Lang Team initiatives from project board
+pub fn lang_initiatives<'a>() -> Box<dyn Action + Send + Sync> {
+    Box::new(Step {
+        name: "lang_initiatives", 
+        actions: vec![
+            Query {
+                repos: vec![("rust-lang", "lang-team")], // Placeholder repo for project board query
+                queries: vec![
+                    QueryMap {
+                        name: "initiatives",
+                        kind: QueryKind::List,
+                        query: Arc::new(github::ProjectBoardInitiatives {
+                            project_number: 63, // Lang team initiatives project board
+                        }),
+                    },
+                ],
+            },
+        ],
+    })
+}
+
 // Lists available agenda pages
 pub static INDEX: &str = r#"
 <html>
@@ -722,6 +743,7 @@ pub static INDEX: &str = r#"
     <li><a href="/agenda/lang/triage">T-lang triage agenda</a></li>
     <li><a href="/agenda/lang/planning">T-lang planning agenda</a></li>
     <li><a href="/agenda/types/planning">T-types planning agenda</a></li>
+    <li><a href="/agenda/lang/initiatives">T-lang initiatives report</a></li>
 </ul>
 </body>
 </html>

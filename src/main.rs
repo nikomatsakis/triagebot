@@ -29,6 +29,9 @@ async fn handle_agenda_request(req: String) -> anyhow::Result<String> {
     if req == "/agenda/types/planning" {
         return triagebot::agenda::types_planning().call().await;
     }
+    if req == "/agenda/lang/initiatives" {
+        return triagebot::agenda::lang_initiatives().call().await;
+    }
 
     anyhow::bail!("Unknown agenda; see /agenda for index.")
 }
@@ -64,6 +67,7 @@ async fn serve_req(
     if req.uri.path() == "/agenda/lang/triage"
         || req.uri.path() == "/agenda/lang/planning"
         || req.uri.path() == "/agenda/types/planning"
+        || req.uri.path() == "/agenda/lang/initiatives"
     {
         match agenda
             .ready()
